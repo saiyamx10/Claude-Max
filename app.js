@@ -265,21 +265,21 @@ function drawBody(c, text, x, y, maxW, maxY, fontPx, family, color) {
   return y;
 }
 
-/* focus line: a sentence with the word highlighted inline; returns phrase center */
-function drawFocusLine(c, tmpl, phrase, cxCenter, cy, family, fontPx, ink, hlColor) {
+/* focus line: a sentence with the word highlighted inline. The HIGHLIGHTED
+   phrase is anchored so its center sits exactly at (cx, cy) every frame — the
+   word stays locked in the middle while the surrounding words change. */
+function drawFocusLine(c, tmpl, phrase, cx, cy, family, fontPx, ink, hlColor) {
   c.font = `${fontPx}px ${family}`; c.textBaseline = 'middle'; c.textAlign = 'left';
   const parts = tmpl.split('{W}'); const before = parts[0], after = parts[1] || '';
-  const bW = c.measureText(before).width, pW = c.measureText(phrase).width, aW = c.measureText(after).width;
-  const total = bW + pW + aW;
-  const x = cxCenter - total / 2;
-  c.fillStyle = ink; c.fillText(before, x, cy);
-  const px = x + bW;
+  const bW = c.measureText(before).width, pW = c.measureText(phrase).width;
+  const px = cx - pW / 2;               // phrase left edge -> phrase centered on cx
+  c.fillStyle = ink; c.fillText(before, px - bW, cy);   // before ends where phrase starts
   const padX = fontPx * 0.09, padY = fontPx * 0.06;
   c.fillStyle = hlColor;
   c.fillRect(px - padX, cy - fontPx * 0.52 - padY, pW + padX * 2, fontPx * 1.04 + padY * 2);
   c.fillStyle = ink; c.fillText(phrase, px, cy);
-  c.fillText(after, px + pW, cy);
-  return { cx: px + pW / 2, cy };
+  c.fillText(after, px + pW, cy);       // after starts where phrase ends
+  return { cx, cy };
 }
 
 /* THE MATCH-CUT LOOK: word highlighted inline in a real newspaper article,
@@ -311,9 +311,9 @@ function drawNewspaper(i, rand, word, font, paper, ink) {
   // short body under the headline
   y = drawBody(p, genBody(rand, 3), mL, y + base * 0.028, colW, H * 0.44, base * 0.028, serif, bodyColor);
 
-  // the highlighted word, inline in a sentence, near vertical center
+  // the highlighted word — locked to the EXACT center of the frame
   const focusSize = base * 0.05;
-  const fy = H * 0.53;
+  const fy = H * 0.5;
   const box = drawFocusLine(p, pick(rand, FOCUS_TEMPLATES), word, W / 2, fy, font, focusSize, ink, el.highlight.value);
 
   // italic subhead under it
@@ -325,29 +325,29 @@ function drawNewspaper(i, rand, word, font, paper, ink) {
   // more body filling to the bottom
   drawBody(p, genBody(rand, 8), mL, fy + focusSize * 1.7, colW, H * 0.98, base * 0.028, serif, bodyColor);
 
-  // ---- composite with depth-of-field ----
-  const blurAmt = Math.max(3, base * 0.011);
+  // ---- composite with a gentle depth-of-field (softens the edges only) ----
+  const blurAmt = Math.max(2, base * 0.006);   // noticeably lower than before
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, W, H);
   ctx.save(); ctx.filter = `blur(${blurAmt}px)`; ctx.drawImage(pageCanvas, 0, 0); ctx.restore();
 
-  // sharp region masked to an ellipse around the highlighted word
+  // keep a large sharp region centered on the word; only edges/corners blur
   const f = focusCtx;
   f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over';
   f.clearRect(0, 0, W, H); f.drawImage(pageCanvas, 0, 0);
   f.globalCompositeOperation = 'destination-in';
   f.save();
-  f.translate(box.cx, box.cy); f.scale(1, 0.5);
-  const g = f.createRadialGradient(0, 0, base * 0.03, 0, 0, base * 0.36);
-  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.5, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  f.translate(box.cx, box.cy); f.scale(1, 0.66);
+  const g = f.createRadialGradient(0, 0, base * 0.05, 0, 0, base * 0.72);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.7, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
   f.fillStyle = g; f.fillRect(-W * 1.5, -H * 1.5, W * 3, H * 3);
   f.restore();
   f.globalCompositeOperation = 'source-over';
   ctx.drawImage(focusCanvas, 0, 0);
 
   if (el.grain.checked) drawGrain(W, H, i);
-  const vig = ctx.createRadialGradient(W/2, H/2, base * 0.26, W/2, H/2, base * 0.72);
-  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  const vig = ctx.createRadialGradient(W/2, H/2, base * 0.34, W/2, H/2, base * 0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.4)');
   ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
 }
 
