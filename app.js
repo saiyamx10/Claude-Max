@@ -54,7 +54,7 @@ const SYSTEM_FONTS = [
 
 const RATIOS = { '9:16':[9,16], '16:9':[16,9], '1:1':[1,1], '4:5':[4,5], '3:4':[3,4], '2.35:1':[2.35,1] };
 const BG_DEFAULTS = {
-  newspaper: { paper:'#f4f1e8', ink:'#141414', note:'Newsprint background with scattered filler text.' },
+  newspaper: { paper:'#f4f1e8', ink:'#141414', note:'Real newspaper article — the word is highlighted inline with a focus blur.' },
   clean:     { paper:'#f4f1e8', ink:'#141414', note:'Solid paper, no filler — just the hero word.' },
   dark:      { paper:'#0d0d0d', ink:'#f5f5f5', note:'Modern dark background with light ink.' },
   green:     { paper:'#00ff00', ink:'#111111', note:'Chroma-key green (#00FF00). Key it out in any editor.' },
@@ -167,112 +167,235 @@ function fontFor(i) {
   return `"${state.fonts[idx].name}"`;
 }
 
-function drawFrame(frameIndex) {
-  const W = canvas.width, H = canvas.height;
-  const rand = rng(frameIndex * 2654435761 + 12345);
-  const word = currentWord();
-  const font = fontFor(frameIndex);
-  const bg = state.bg;
-  const paper = el.paper.value;
-  let ink = el.ink.value;
-  const flashOn = el.flash.checked && (frameIndex % 4 === 0);
+/* ---------- newspaper copy (used to build a believable article) ---------- */
+const CATEGORIES = ['NATION','CULTURE','BUSINESS','SCIENCE','OPINION','WORLD','FEATURES','LIFESTYLE','TECHNOLOGY','ARTS','REPORT','ANALYSIS'];
+const HEADLINES = [
+  'Understanding the Complete Guide',
+  'The Story Nobody Saw Coming',
+  'How Everything Quietly Changed',
+  'Experts Weigh In Once Again',
+  'What It Means For The Future',
+  'Inside The Movement Today',
+  'The Rise Of A New Era Begins',
+  'A Closer Look At The Numbers',
+  'Voices From The Front Lines',
+  'The Question On Everyone’s Mind',
+];
+/* {W} is where the highlighted word is dropped, inline in a real sentence */
+const FOCUS_TEMPLATES = [
+  'a decision made with {W} leads to the future',
+  'new study links {W} to nearly everything',
+  'the art of a real {W} looks like this',
+  'how {W} is quietly changing the game',
+  'a closer look at {W} and its impact',
+  'experts say {W} will define the decade',
+  'the untold rise of {W} in modern culture',
+  'why {W} matters more now than ever before',
+  'inside the world of {W} today',
+  'everything you know about {W} is shifting',
+];
+const SUBHEADS = [
+  'A closer look at the story behind the headline',
+  'Reporting from the field — continued on page 4',
+  'Our correspondents explain what happens next',
+  'The full account, in their own words',
+  'What the latest findings really tell us',
+];
 
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.clearRect(0, 0, W, H);
-
-  // background fill (transparent leaves alpha)
-  if (bg !== 'transparent') {
-    ctx.fillStyle = flashOn ? ink : paper;
-    ctx.fillRect(0, 0, W, H);
-    if (flashOn) ink = paper; // invert for strobe frame
+/* offscreen buffers for the depth-of-field composite */
+let pageCanvas = null, pageCtx = null, focusCanvas = null, focusCtx = null;
+function ensureOffscreen(W, H) {
+  if (!pageCanvas) { pageCanvas = document.createElement('canvas'); focusCanvas = document.createElement('canvas'); }
+  if (pageCanvas.width !== W || pageCanvas.height !== H) {
+    pageCanvas.width = W; pageCanvas.height = H; focusCanvas.width = W; focusCanvas.height = H;
   }
+  pageCtx = pageCanvas.getContext('2d'); focusCtx = focusCanvas.getContext('2d');
+}
 
-  const baseSize = Math.min(W, H);
-  const paperish = (bg === 'newspaper' || bg === 'clean' || bg === 'dark');
+function pick(rand, arr) { return arr[Math.floor(rand() * arr.length)]; }
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+function genSentence(rand, n) {
+  const w = []; for (let i = 0; i < n; i++) w.push(FILLER[Math.floor(rand() * FILLER.length)]);
+  return capitalize(w.join(' ')) + '.';
+}
+function genBody(rand, sentences) {
+  const s = []; for (let i = 0; i < sentences; i++) s.push(genSentence(rand, 5 + Math.floor(rand() * 9)));
+  return s.join(' ');
+}
 
-  // subtle tone gradient on paper-like backgrounds
-  if (paperish && !flashOn) {
-    const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, 'rgba(0,0,0,0.02)');
-    g.addColorStop(1, 'rgba(0,0,0,0.06)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+/* wrapped headline; returns the y after the last baseline */
+function drawWrapped(c, text, x, y, maxW, fontPx, family, color, lineGap) {
+  c.font = `${fontPx}px ${family}`; c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const words = text.split(' '); let line = ''; const lh = fontPx * (lineGap || 1.05);
+  for (const wd of words) {
+    const t = line ? line + ' ' + wd : wd;
+    if (c.measureText(t).width > maxW && line) { c.fillText(line, x, y); y += lh; line = wd; }
+    else line = t;
   }
+  if (line) { c.fillText(line, x, y); y += lh; }
+  return y;
+}
 
-  // newspaper filler
-  if (el.filler.checked && bg === 'newspaper' && !flashOn) {
-    const lineH = baseSize * 0.045;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    let y = lineH, li = 0;
-    while (y < H + lineH) {
-      const fs = lineH * (0.62 + rand() * 0.12);
-      ctx.font = `${fs}px ${font}`;
-      ctx.fillStyle = `rgba(20,20,20,${0.26 + rand() * 0.22})`;
-      let x = W * 0.05 * rand();
-      let words = 0;
-      while (x < W * 0.95) {
-        const useHero = (li % 5 === 2 && words === 3);
-        const piece = useHero ? word : FILLER[Math.floor(rand() * FILLER.length)];
-        const m = ctx.measureText(piece + ' ').width;
-        if (x + m > W * 0.96) break;
-        ctx.fillText(piece, x, y); x += m; words++;
-      }
-      y += lineH * (0.95 + rand() * 0.2); li++;
+/* justified body text filling a column down to maxY; returns final y */
+function drawBody(c, text, x, y, maxW, maxY, fontPx, family, color) {
+  c.font = `${fontPx}px ${family}`; c.fillStyle = color; c.textAlign = 'left'; c.textBaseline = 'alphabetic';
+  const lh = fontPx * 1.5; const spaceW = c.measureText(' ').width;
+  const words = text.split(' '); let line = [];
+  const wordW = (w) => c.measureText(w).width;
+  const flush = (justify) => {
+    if (!line.length) return;
+    const wordsW = line.reduce((s, w) => s + wordW(w), 0);
+    let gap = spaceW;
+    if (justify && line.length > 1) {
+      gap = (maxW - wordsW) / (line.length - 1);
+      if (gap < spaceW * 0.6) gap = spaceW; if (gap > spaceW * 3.2) gap = spaceW * 3.2;
     }
-    // fade filler toward center so the hero word pops
-    const vg = ctx.createRadialGradient(W/2, H/2, baseSize*0.05, W/2, H/2, baseSize*0.5);
-    vg.addColorStop(0, hexToRgba(paper, 0.92));
-    vg.addColorStop(0.55, hexToRgba(paper, 0.5));
-    vg.addColorStop(1, hexToRgba(paper, 0));
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+    let cx = x;
+    for (const w of line) { c.fillText(w, cx, y); cx += wordW(w) + gap; }
+    y += lh; line = [];
+  };
+  for (const wd of words) {
+    if (y > maxY) break;
+    const test = line.concat(wd);
+    const w = test.reduce((s, x) => s + wordW(x), 0) + spaceW * (test.length - 1);
+    if (w > maxW && line.length) { flush(true); line = [wd]; }
+    else line.push(wd);
   }
+  if (y <= maxY) flush(false);
+  return y;
+}
 
-  // hero word
+/* focus line: a sentence with the word highlighted inline; returns phrase center */
+function drawFocusLine(c, tmpl, phrase, cxCenter, cy, family, fontPx, ink, hlColor) {
+  c.font = `${fontPx}px ${family}`; c.textBaseline = 'middle'; c.textAlign = 'left';
+  const parts = tmpl.split('{W}'); const before = parts[0], after = parts[1] || '';
+  const bW = c.measureText(before).width, pW = c.measureText(phrase).width, aW = c.measureText(after).width;
+  const total = bW + pW + aW;
+  const x = cxCenter - total / 2;
+  c.fillStyle = ink; c.fillText(before, x, cy);
+  const px = x + bW;
+  const padX = fontPx * 0.09, padY = fontPx * 0.06;
+  c.fillStyle = hlColor;
+  c.fillRect(px - padX, cy - fontPx * 0.52 - padY, pW + padX * 2, fontPx * 1.04 + padY * 2);
+  c.fillStyle = ink; c.fillText(phrase, px, cy);
+  c.fillText(after, px + pW, cy);
+  return { cx: px + pW / 2, cy };
+}
+
+/* THE MATCH-CUT LOOK: word highlighted inline in a real newspaper article,
+   with a shallow depth-of-field blur focused on the highlighted word. */
+function drawNewspaper(i, rand, word, font, paper, ink) {
+  const W = canvas.width, H = canvas.height, base = Math.min(W, H);
+  ensureOffscreen(W, H);
+  const p = pageCtx;
+  p.setTransform(1, 0, 0, 1, 0, 0); p.globalCompositeOperation = 'source-over';
+  p.clearRect(0, 0, W, H);
+  p.fillStyle = paper; p.fillRect(0, 0, W, H);
+  const tone = p.createLinearGradient(0, 0, W, H);
+  tone.addColorStop(0, 'rgba(120,110,90,0.05)'); tone.addColorStop(1, 'rgba(80,70,55,0.10)');
+  p.fillStyle = tone; p.fillRect(0, 0, W, H);
+
+  const serif = 'Georgia, "Times New Roman", "Times", serif';
+  const mL = W * 0.09, colW = W * 0.82;
+  const bodyColor = hexToRgba(ink, 0.82);
+
+  // category / kicker + rule
+  p.textAlign = 'left'; p.textBaseline = 'alphabetic';
+  p.font = `${base * 0.026}px ${serif}`; p.fillStyle = hexToRgba(ink, 0.8);
+  p.fillText(pick(rand, CATEGORIES) + '   ' + pick(rand, CATEGORIES), mL, H * 0.085);
+  p.fillStyle = hexToRgba(ink, 0.45); p.fillRect(mL, H * 0.092, colW, Math.max(1, base * 0.0016));
+
+  // headline (frame font — this is what flickers/changes per frame)
+  let y = drawWrapped(p, pick(rand, HEADLINES), mL, H * 0.155, colW, base * 0.058, font, ink, 1.04);
+
+  // short body under the headline
+  y = drawBody(p, genBody(rand, 3), mL, y + base * 0.028, colW, H * 0.44, base * 0.028, serif, bodyColor);
+
+  // the highlighted word, inline in a sentence, near vertical center
+  const focusSize = base * 0.05;
+  const fy = H * 0.53;
+  const box = drawFocusLine(p, pick(rand, FOCUS_TEMPLATES), word, W / 2, fy, font, focusSize, ink, el.highlight.value);
+
+  // italic subhead under it
+  p.textAlign = 'center'; p.textBaseline = 'alphabetic';
+  p.font = `italic ${base * 0.024}px ${serif}`; p.fillStyle = hexToRgba(ink, 0.62);
+  p.fillText(pick(rand, SUBHEADS), W / 2, fy + focusSize * 1.0);
+  p.textAlign = 'left';
+
+  // more body filling to the bottom
+  drawBody(p, genBody(rand, 8), mL, fy + focusSize * 1.7, colW, H * 0.98, base * 0.028, serif, bodyColor);
+
+  // ---- composite with depth-of-field ----
+  const blurAmt = Math.max(3, base * 0.011);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, W, H);
+  ctx.save(); ctx.filter = `blur(${blurAmt}px)`; ctx.drawImage(pageCanvas, 0, 0); ctx.restore();
+
+  // sharp region masked to an ellipse around the highlighted word
+  const f = focusCtx;
+  f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over';
+  f.clearRect(0, 0, W, H); f.drawImage(pageCanvas, 0, 0);
+  f.globalCompositeOperation = 'destination-in';
+  f.save();
+  f.translate(box.cx, box.cy); f.scale(1, 0.5);
+  const g = f.createRadialGradient(0, 0, base * 0.03, 0, 0, base * 0.36);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.5, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  f.fillStyle = g; f.fillRect(-W * 1.5, -H * 1.5, W * 3, H * 3);
+  f.restore();
+  f.globalCompositeOperation = 'source-over';
+  ctx.drawImage(focusCanvas, 0, 0);
+
+  if (el.grain.checked) drawGrain(W, H, i);
+  const vig = ctx.createRadialGradient(W/2, H/2, base * 0.26, W/2, H/2, base * 0.72);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.5)');
+  ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
+}
+
+/* SIMPLE mode: centered highlighted word for clean / dark / green / transparent
+   backgrounds (title-card & compositing use). */
+function drawSimple(i, rand, word, font, bg, paper, ink) {
+  const W = canvas.width, H = canvas.height, base = Math.min(W, H);
+  const flashOn = el.flash.checked && (i % 4 === 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, W, H);
+  if (bg !== 'transparent') { ctx.fillStyle = flashOn ? ink : paper; ctx.fillRect(0, 0, W, H); if (flashOn) ink = paper; }
+  const paperish = (bg === 'clean' || bg === 'dark');
+
   const jx = el.jitter.checked ? (rand() - 0.5) * W * 0.05 : 0;
   const jy = el.jitter.checked ? (rand() - 0.5) * H * 0.03 : 0;
   const rot = el.jitter.checked ? (rand() - 0.5) * 0.05 : 0;
-  const cx = W / 2 + jx, cy = H / 2 + jy;
 
-  let size = baseSize * 0.22;
-  ctx.font = `${size}px ${font}`;
-  let tw = ctx.measureText(word).width;
-  const maxW = W * 0.82;
-  if (tw > maxW) { size *= maxW / tw; }
-  else if (tw < maxW * 0.45 && tw > 0) { size *= (maxW * 0.6) / tw; }
-  ctx.font = `${size}px ${font}`;
-  tw = ctx.measureText(word).width;
-  const th = size;
+  let size = base * 0.2; ctx.font = `${size}px ${font}`;
+  let tw = ctx.measureText(word).width; const maxW = W * 0.82;
+  if (tw > maxW) size *= maxW / tw; else if (tw < maxW * 0.45 && tw > 0) size *= (maxW * 0.6) / tw;
+  ctx.font = `${size}px ${font}`; tw = ctx.measureText(word).width; const th = size;
 
-  ctx.save();
-  ctx.translate(cx, cy); ctx.rotate(rot);
+  ctx.save(); ctx.translate(W/2 + jx, H/2 + jy); ctx.rotate(rot);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const padX = size * 0.14, padY = size * 0.12;
   const bx = -tw/2 - padX, by = -th/2 - padY, bw = tw + padX*2, bh = th + padY*2;
-
   const hl = state.hlStyle;
-  if (hl === 'box') {
-    ctx.fillStyle = el.highlight.value;
-    roundRect(ctx, bx, by, bw, bh, size * 0.06); ctx.fill();
-    ctx.fillStyle = ink; ctx.fillText(word, 0, 0);
-  } else if (hl === 'underline') {
-    ctx.fillStyle = ink; ctx.fillText(word, 0, 0);
-    ctx.fillStyle = el.highlight.value; ctx.fillRect(-tw/2, th*0.42, tw, size*0.1);
-  } else if (hl === 'invert') {
-    ctx.fillStyle = ink;
-    roundRect(ctx, bx, by, bw, bh, size * 0.04); ctx.fill();
-    ctx.fillStyle = el.highlight.value; ctx.fillText(word, 0, 0);
-  } else {
-    ctx.fillStyle = ink; ctx.fillText(word, 0, 0);
-  }
+  if (hl === 'box') { ctx.fillStyle = el.highlight.value; roundRect(ctx, bx, by, bw, bh, size*0.06); ctx.fill(); ctx.fillStyle = ink; ctx.fillText(word, 0, 0); }
+  else if (hl === 'underline') { ctx.fillStyle = ink; ctx.fillText(word, 0, 0); ctx.fillStyle = el.highlight.value; ctx.fillRect(-tw/2, th*0.42, tw, size*0.1); }
+  else if (hl === 'invert') { ctx.fillStyle = ink; roundRect(ctx, bx, by, bw, bh, size*0.04); ctx.fill(); ctx.fillStyle = el.highlight.value; ctx.fillText(word, 0, 0); }
+  else { ctx.fillStyle = ink; ctx.fillText(word, 0, 0); }
   ctx.restore();
 
-  // grain + vignette (never on green/transparent so keying/alpha stay clean)
-  if (el.grain.checked && paperish && !flashOn) drawGrain(W, H, frameIndex);
+  if (el.grain.checked && paperish && !flashOn) drawGrain(W, H, i);
   if (paperish && !flashOn) {
-    const vig = ctx.createRadialGradient(W/2, H/2, baseSize*0.35, W/2, H/2, baseSize*0.72);
+    const vig = ctx.createRadialGradient(W/2, H/2, base*0.35, W/2, H/2, base*0.72);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
     vig.addColorStop(1, bg === 'dark' ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.16)');
     ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
   }
+}
+
+function drawFrame(frameIndex) {
+  const rand = rng(frameIndex * 2654435761 + 12345);
+  const word = currentWord(), font = fontFor(frameIndex);
+  const bg = state.bg, paper = el.paper.value, ink = el.ink.value;
+  if (bg === 'newspaper') drawNewspaper(frameIndex, rand, word, font, paper, ink);
+  else drawSimple(frameIndex, rand, word, font, bg, paper, ink);
 }
 
 let grainCanvas = null;
