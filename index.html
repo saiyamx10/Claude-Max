@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Match Cut Studio — Text Match Cut Generator</title>
+<meta name="description" content="Generate text match cut videos locally in your browser. Type a word, pick an aspect ratio, cycle a different font on every frame, add typewriter sound, export video." />
+
+<!-- Optional Google Fonts for extra variety. The app works fully offline with
+     system fonts; these just add more mismatched styles when you're online. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link id="googleFontsLink" href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Bodoni+Moda:ital@1&family=Cinzel:wght@700&family=Courier+Prime&family=DM+Serif+Display&family=Fraunces:ital,opsz,wght@1,9..144,900&family=Libre+Baskerville&family=Lobster&family=Merriweather:wght@900&family=Oswald:wght@700&family=Pacifico&family=Playfair+Display:ital,wght@1,900&family=Roboto+Slab:wght@900&family=Rye&family=Special+Elite&family=Staatliches&family=Ultra&family=Yeseva+One&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">✂︎</span>
+    <div>
+      <h1>Match Cut Studio</h1>
+      <p class="tagline">Text match-cut generator — runs entirely in your browser</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span id="fontCount" class="pill">0 fonts loaded</span>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- ============ CONTROLS ============ -->
+  <section class="panel controls" aria-label="Controls">
+
+    <div class="field">
+      <label for="wordInput">Word / phrase</label>
+      <input id="wordInput" type="text" value="DREAM" autocomplete="off" spellcheck="false" />
+      <small>The word that gets highlighted and matched across every frame.</small>
+    </div>
+
+    <div class="field">
+      <label>Aspect ratio</label>
+      <div class="segmented" id="ratioGroup">
+        <button type="button" data-ratio="9:16" class="active">9:16</button>
+        <button type="button" data-ratio="16:9">16:9</button>
+        <button type="button" data-ratio="1:1">1:1</button>
+        <button type="button" data-ratio="4:5">4:5</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="fpsInput">Frames / second <span id="fpsVal" class="val">30</span></label>
+        <input id="fpsInput" type="range" min="8" max="60" step="1" value="30" />
+      </div>
+      <div class="field">
+        <label for="holdInput">Frames per font <span id="holdVal" class="val">2</span></label>
+        <input id="holdInput" type="range" min="1" max="8" step="1" value="2" />
+        <small>Lower = faster flicker.</small>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="durInput">Duration (seconds) <span id="durVal" class="val">3.0</span></label>
+      <input id="durInput" type="range" min="1" max="12" step="0.5" value="3" />
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="paperColor">Paper</label>
+        <input id="paperColor" type="color" value="#f4f1e8" />
+      </div>
+      <div class="field">
+        <label for="highlightColor">Highlight</label>
+        <input id="highlightColor" type="color" value="#ffd400" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Highlight style</label>
+      <div class="segmented" id="hlStyleGroup">
+        <button type="button" data-hl="box" class="active">Marker box</button>
+        <button type="button" data-hl="underline">Underline</button>
+        <button type="button" data-hl="invert">Invert</button>
+        <button type="button" data-hl="none">None</button>
+      </div>
+    </div>
+
+    <div class="field toggles">
+      <label class="check"><input type="checkbox" id="fillerToggle" checked /> Newspaper filler text</label>
+      <label class="check"><input type="checkbox" id="grainToggle" checked /> Paper grain</label>
+      <label class="check"><input type="checkbox" id="jitterToggle" checked /> Position jitter</label>
+      <label class="check"><input type="checkbox" id="uppercaseToggle" /> Force UPPERCASE</label>
+    </div>
+
+    <hr />
+
+    <!-- FONTS -->
+    <div class="field">
+      <label for="fontFiles">Your fonts (a new one every frame)</label>
+      <input id="fontFiles" type="file" accept=".ttf,.otf,.woff,.woff2" multiple />
+      <small>Upload .ttf / .otf / .woff / .woff2. They're added to the rotation. The app also ships with a set of built-in fonts.</small>
+      <div id="fontChips" class="chips"></div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="shuffleFonts" checked /> Shuffle font order</label>
+    </div>
+
+    <hr />
+
+    <!-- SOUND -->
+    <div class="field">
+      <label for="soundSelect">Sound effect</label>
+      <select id="soundSelect">
+        <option value="typewriter">Typewriter clack (built-in)</option>
+        <option value="tick">Tick / camera shutter (built-in)</option>
+        <option value="riser">Whoosh riser (built-in)</option>
+        <option value="custom">Custom audio file…</option>
+        <option value="none">None</option>
+      </select>
+      <input id="soundFile" type="file" accept="audio/*" class="hidden" />
+      <div class="grid2" style="margin-top:8px">
+        <div class="field">
+          <label for="volInput">Volume <span id="volVal" class="val">70</span></label>
+          <input id="volInput" type="range" min="0" max="100" step="1" value="70" />
+        </div>
+        <div class="field">
+          <label class="check" style="margin-top:26px"><input type="checkbox" id="perFrameSound" checked /> Trigger on every frame</label>
+        </div>
+      </div>
+      <small id="soundHint">A clack fires on each font change. Uncheck "every frame" to play a custom track once from the start.</small>
+    </div>
+
+    <div class="actions">
+      <button id="playBtn" class="btn primary">▶ Preview</button>
+      <button id="exportBtn" class="btn">⬇ Export video</button>
+      <button id="frameBtn" class="btn ghost">Save PNG frame</button>
+    </div>
+    <div id="status" class="status"></div>
+
+  </section>
+
+  <!-- ============ STAGE ============ -->
+  <section class="panel stage" aria-label="Preview">
+    <div class="stage-inner">
+      <canvas id="stage" width="720" height="1280"></canvas>
+      <div id="recBadge" class="rec-badge hidden">● REC</div>
+    </div>
+    <p class="hint">Tip: upload the exact fonts you want, then hit <b>Export video</b>. Output is a <code>.webm</code> you can drop straight into any editor. Everything is generated on your machine — nothing is uploaded.</p>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
