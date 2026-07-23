@@ -19,6 +19,7 @@ const el = {
   paper: $('paperColor'), ink: $('inkColor'), highlight: $('highlightColor'),
   filler: $('fillerToggle'), grain: $('grainToggle'),
   jitter: $('jitterToggle'), flash: $('flashToggle'), upper: $('uppercaseToggle'),
+  blurRange: $('blurRange'), blurVal: $('blurVal'),
   fontFiles: $('fontFiles'), fontChips: $('fontChips'), fontCount: $('fontCount'),
   shuffle: $('shuffleFonts'),
   soundSelect: $('soundSelect'), soundFile: $('soundFile'),
@@ -282,8 +283,21 @@ function drawFocusLine(c, tmpl, phrase, cx, cy, family, fontPx, ink, hlColor) {
   return { cx, cy };
 }
 
-/* THE MATCH-CUT LOOK: word highlighted inline in a real newspaper article,
-   with a shallow depth-of-field blur focused on the highlighted word. */
+/* build a centered line of random words that fills ~the column width */
+function buildLine(c, rand, maxW, fontPx, font) {
+  c.font = `${fontPx}px ${font}`;
+  const words = [];
+  while (words.length < 16) {
+    const wd = FILLER[Math.floor(rand() * FILLER.length)];
+    const test = (words.length ? words.join(' ') + ' ' : '') + wd;
+    if (c.measureText(test).width > maxW * 0.96 && words.length) break;
+    words.push(wd);
+  }
+  return capitalize(words.join(' '));
+}
+
+/* THE textmatchcut LOOK: uniform lines of newspaper text, one font per frame,
+   the highlighted phrase locked to the exact center, radial depth-of-field. */
 function drawNewspaper(i, rand, word, font, paper, ink) {
   const W = canvas.width, H = canvas.height, base = Math.min(W, H);
   ensureOffscreen(W, H);
@@ -291,63 +305,78 @@ function drawNewspaper(i, rand, word, font, paper, ink) {
   p.setTransform(1, 0, 0, 1, 0, 0); p.globalCompositeOperation = 'source-over';
   p.clearRect(0, 0, W, H);
   p.fillStyle = paper; p.fillRect(0, 0, W, H);
-  const tone = p.createLinearGradient(0, 0, W, H);
-  tone.addColorStop(0, 'rgba(120,110,90,0.05)'); tone.addColorStop(1, 'rgba(80,70,55,0.10)');
+  const tone = p.createLinearGradient(0, 0, 0, H);
+  tone.addColorStop(0, 'rgba(90,80,60,0.05)'); tone.addColorStop(1, 'rgba(70,60,45,0.08)');
   p.fillStyle = tone; p.fillRect(0, 0, W, H);
 
-  const serif = 'Georgia, "Times New Roman", "Times", serif';
-  const mL = W * 0.09, colW = W * 0.82;
-  const bodyColor = hexToRgba(ink, 0.82);
+  const fontPx = base * 0.05;                 // FONT_SIZE_RATIO 0.05, like the reference
+  const lineH = fontPx * 1.5;                 // VERTICAL_SPREAD_FACTOR 1.5
+  const cyC = H / 2;                          // highlighted line is the exact middle
+  const maxW = W * 0.92;
 
-  // category / kicker + rule
-  p.textAlign = 'left'; p.textBaseline = 'alphabetic';
-  p.font = `${base * 0.026}px ${serif}`; p.fillStyle = hexToRgba(ink, 0.8);
-  p.fillText(pick(rand, CATEGORIES) + '   ' + pick(rand, CATEGORIES), mL, H * 0.085);
-  p.fillStyle = hexToRgba(ink, 0.45); p.fillRect(mL, H * 0.092, colW, Math.max(1, base * 0.0016));
+  // lines above and below the centre, all same size, all centered
+  const up = Math.ceil((cyC + lineH) / lineH), down = Math.ceil((H - cyC + lineH) / lineH);
+  p.textBaseline = 'middle';
+  for (let k = -up; k <= down; k++) {
+    if (k === 0) continue;                    // centre line drawn separately below
+    const y = cyC + k * lineH;
+    if (y < -lineH || y > H + lineH) continue;
+    p.textAlign = 'center';
+    p.font = `${fontPx}px ${font}`;
+    p.fillStyle = hexToRgba(ink, 0.9);
+    p.fillText(buildLine(p, rand, maxW, fontPx, font), W / 2, y);
+  }
 
-  // headline (frame font — this is what flickers/changes per frame)
-  let y = drawWrapped(p, pick(rand, HEADLINES), mL, H * 0.155, colW, base * 0.058, font, ink, 1.04);
+  // ---- the centre line: random words, {W} highlighted and centered ----
+  p.font = `${fontPx}px ${font}`;
+  const pW = p.measureText(word).width;
+  const halfSpace = (W - pW) / 2;
+  const beforeWords = [], afterWords = [];
+  while (beforeWords.length < 8) {
+    const wd = FILLER[Math.floor(rand() * FILLER.length)];
+    const t = wd + ' ' + beforeWords.join(' ');
+    if (p.measureText(t).width > halfSpace * 0.9 && beforeWords.length) break;
+    beforeWords.unshift(wd);
+  }
+  while (afterWords.length < 8) {
+    const wd = FILLER[Math.floor(rand() * FILLER.length)];
+    const t = afterWords.join(' ') + ' ' + wd;
+    if (p.measureText(t).width > halfSpace * 0.9 && afterWords.length) break;
+    afterWords.push(wd);
+  }
+  const tmpl = capitalize(beforeWords.join(' ')) + ' {W} ' + afterWords.join(' ');
+  const box = drawFocusLine(p, tmpl, word, W / 2, cyC, font, fontPx, ink, el.highlight.value);
 
-  // short body under the headline
-  y = drawBody(p, genBody(rand, 3), mL, y + base * 0.028, colW, H * 0.44, base * 0.028, serif, bodyColor);
-
-  // the highlighted word — locked to the EXACT center of the frame
-  const focusSize = base * 0.05;
-  const fy = H * 0.5;
-  const box = drawFocusLine(p, pick(rand, FOCUS_TEMPLATES), word, W / 2, fy, font, focusSize, ink, el.highlight.value);
-
-  // italic subhead under it
-  p.textAlign = 'center'; p.textBaseline = 'alphabetic';
-  p.font = `italic ${base * 0.024}px ${serif}`; p.fillStyle = hexToRgba(ink, 0.62);
-  p.fillText(pick(rand, SUBHEADS), W / 2, fy + focusSize * 1.0);
-  p.textAlign = 'left';
-
-  // more body filling to the bottom
-  drawBody(p, genBody(rand, 8), mL, fy + focusSize * 1.7, colW, H * 0.98, base * 0.028, serif, bodyColor);
-
-  // ---- composite with a gentle depth-of-field (softens the edges only) ----
-  const blurAmt = Math.max(2, base * 0.006);   // noticeably lower than before
+  // ---- radial depth-of-field with adjustable radius ----
+  const strength = el.blurRange ? +el.blurRange.value : 35;   // 0..100
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'source-over';
   ctx.clearRect(0, 0, W, H);
-  ctx.save(); ctx.filter = `blur(${blurAmt}px)`; ctx.drawImage(pageCanvas, 0, 0); ctx.restore();
 
-  // keep a large sharp region centered on the word; only edges/corners blur
-  const f = focusCtx;
-  f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over';
-  f.clearRect(0, 0, W, H); f.drawImage(pageCanvas, 0, 0);
-  f.globalCompositeOperation = 'destination-in';
-  f.save();
-  f.translate(box.cx, box.cy); f.scale(1, 0.66);
-  const g = f.createRadialGradient(0, 0, base * 0.05, 0, 0, base * 0.72);
-  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.7, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-  f.fillStyle = g; f.fillRect(-W * 1.5, -H * 1.5, W * 3, H * 3);
-  f.restore();
-  f.globalCompositeOperation = 'source-over';
-  ctx.drawImage(focusCanvas, 0, 0);
+  if (strength <= 1) {
+    ctx.drawImage(pageCanvas, 0, 0);          // no blur
+  } else {
+    const blurAmt = Math.max(2, base * (strength / 100) * 0.02);
+    ctx.save(); ctx.filter = `blur(${blurAmt}px)`; ctx.drawImage(pageCanvas, 0, 0); ctx.restore();
+    // sharp region centered on the word; shrinks as blur strength rises
+    const sharpR = base * (0.52 - (strength / 100) * 0.30);
+    const fadeR = sharpR + base * 0.18;
+    const f = focusCtx;
+    f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over';
+    f.clearRect(0, 0, W, H); f.drawImage(pageCanvas, 0, 0);
+    f.globalCompositeOperation = 'destination-in';
+    f.save();
+    f.translate(box.cx, box.cy); f.scale(1, 0.7);
+    const g = f.createRadialGradient(0, 0, sharpR * 0.5, 0, 0, fadeR);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(Math.min(0.98, sharpR / fadeR), 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    f.fillStyle = g; f.fillRect(-W * 1.5, -H * 1.5, W * 3, H * 3);
+    f.restore();
+    f.globalCompositeOperation = 'source-over';
+    ctx.drawImage(focusCanvas, 0, 0);
+  }
 
   if (el.grain.checked) drawGrain(W, H, i);
-  const vig = ctx.createRadialGradient(W/2, H/2, base * 0.34, W/2, H/2, base * 0.75);
-  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.4)');
+  const vig = ctx.createRadialGradient(W/2, H/2, base * 0.38, W/2, H/2, base * 0.78);
+  vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(0,0,0,0.32)');
   ctx.fillStyle = vig; ctx.fillRect(0, 0, W, H);
 }
 
@@ -698,6 +727,7 @@ function bind() {
   el.hold.oninput = () => el.holdVal.textContent = el.hold.value;
   el.dur.oninput = () => el.durVal.textContent = (+el.dur.value).toFixed(1) + 's';
   el.vol.oninput = () => el.volVal.textContent = el.vol.value;
+  el.blurRange.oninput = () => { el.blurVal.textContent = el.blurRange.value; drawPreviewFrame(0); };
 
   ['input','change'].forEach(ev =>
     [el.word, el.paper, el.ink, el.highlight, el.filler, el.grain, el.jitter, el.flash, el.upper]
