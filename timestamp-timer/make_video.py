@@ -7,12 +7,23 @@ N = FPS * SECS                      # 300 frames = exactly 10.000 s
 START = 20 * 3600 + 56 * 60 + 50    # 8:56:50 PM as seconds since midnight
 BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
-f_title, f_clock = ImageFont.truetype(BOLD, 44), ImageFont.truetype(MONO, 150)
+f_title, f_clock = ImageFont.truetype(BOLD, 44), ImageFont.truetype(MONO, 130)
 f_small = ImageFont.truetype(BOLD, 30)
 
 def fmt(sec):
     h, m, s = sec // 3600, sec // 60 % 60, sec % 60
-    return f"{h % 12 or 12}:{m:02d}:{s:02d} {'PM' if h >= 12 else 'AM'}"
+    return f"{h % 12 or 12}:{m:02d}:{s:02d}", "PM" if h >= 12 else "AM"
+
+f_ms = ImageFont.truetype(MONO, 80)
+
+def clock(d, y, hms, ms, ampm, fill):
+    # H:MM:SS big, .mmm smaller beside the seconds, then AM/PM
+    parts = [(hms, f_clock, 0), (f".{ms:03d}", f_ms, 62), (" " + ampm, f_clock, 0)]
+    total = sum(d.textlength(t, font=f) for t, f, _ in parts)
+    x = (W - total) / 2
+    for t, f, dy in parts:
+        d.text((x, y + dy), t, font=f, fill=fill)
+        x += d.textlength(t, font=f)
 
 def center(d, y, text, font, fill):
     w = d.textlength(text, font=font)
@@ -30,7 +41,8 @@ for i in range(N):
     img = Image.new("RGB", (W, H), (15, 18, 28))
     d = ImageDraw.Draw(img)
     center(d, 90, "October 06 — 8:56:50 PM to 8:57:00 PM", f_title, (230, 235, 245))
-    center(d, 250, fmt(now), f_clock, (120, 220, 255))
+    hms, ap = fmt(now)
+    clock(d, 260, hms, min(int((t % 1) * 1000 + 1e-6), 999) if t < SECS else 0, ap, (120, 220, 255))
     center(d, 470, f"Elapsed {t:4.1f}s  /  Duration 10s", f_small, (160, 170, 190))
     d.rounded_rectangle((190, 560, 1090, 590), 15, fill=(40, 46, 66))
     d.rounded_rectangle((190, 560, 190 + 900 * t / SECS, 590), 15, fill=(120, 220, 255))
