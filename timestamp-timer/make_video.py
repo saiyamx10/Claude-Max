@@ -1,4 +1,4 @@
-"""Render timestamp.mp4: October 06 — 8:56:50 PM to 8:57:00 PM (exactly 10 s)."""
+"""Render timestamp.mp4: October 06, clock 8:56:50 PM to 8:57:00 PM (exactly 10 s)."""
 import imageio_ffmpeg, subprocess
 from PIL import Image, ImageDraw, ImageFont
 
@@ -40,10 +40,10 @@ for i in range(N):
     now = START + int(t + 1e-9)
     img = Image.new("RGB", (W, H), (15, 18, 28))
     d = ImageDraw.Draw(img)
-    center(d, 90, "October 06 — 8:56:50 PM to 8:57:00 PM", f_title, (230, 235, 245))
+    center(d, 90, "October 06", f_title, (230, 235, 245))
     hms, ap = fmt(now)
     clock(d, 260, hms, min(int((t % 1) * 1000 + 1e-6), 999) if t < SECS else 0, ap, (120, 220, 255))
-    center(d, 470, f"Elapsed {t:4.1f}s  /  Duration 10s", f_small, (160, 170, 190))
+    center(d, 470, f"Elapsed {t:.1f}s", f_small, (160, 170, 190))
     d.rounded_rectangle((190, 560, 1090, 590), 15, fill=(40, 46, 66))
     d.rounded_rectangle((190, 560, 190 + 900 * t / SECS, 590), 15, fill=(120, 220, 255))
     ff.stdin.write(img.tobytes())

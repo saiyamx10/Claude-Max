@@ -7,14 +7,14 @@ h1{font-size:clamp(18px,3.4vw,40px)} #clock{font:700 clamp(48px,13vw,150px) ui-m
 #clock small{font-size:.55em}#bar{width:min(80vw,900px);height:24px;background:#282e42;border-radius:12px;margin:24px auto;overflow:hidden}
 #fill{height:100%;width:0;background:#78dcff} button{font-size:20px;padding:10px 28px;border-radius:8px;border:0;cursor:pointer}
 </style>
-<h1>October 06 — 8:56:50 PM to 8:57:00 PM</h1>
+<h1>October 06</h1>
 <div id="clock">8:56:50 PM</div>
 <div id="bar"><div id="fill"></div></div>
-<div id="el">Elapsed 0.0s / Duration 10s</div><br>
+<div id="el">Elapsed 0.0s</div><br>
 <button id="go">Start</button>
 <script>
 const S=20*3600+56*60+50,D=10,$=id=>document.getElementById(id);
 const fmt=s=>{const h=s/3600|0,m=s/60%60|0,x=s%60;return`${h%12||12}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")} ${h>=12?"PM":"AM"}`};
-function show(t){const ms=String(Math.floor(t%1*1000)).padStart(3,"0"),[a,b]=fmt(S+Math.floor(t)).split(" ");$("clock").innerHTML=`${a}<small>.${ms}</small> ${b}`;$("fill").style.width=t/D*100+"%";$("el").textContent=`Elapsed ${t.toFixed(1)}s / Duration 10s`}
+function show(t){const ms=String(Math.floor(t%1*1000)).padStart(3,"0"),[a,b]=fmt(S+Math.floor(t)).split(" ");$("clock").innerHTML=`${a}<small>.${ms}</small> ${b}`;$("fill").style.width=t/D*100+"%";$("el").textContent=`Elapsed ${t.toFixed(1)}s`}
 $("go").onclick=()=>{const t0=performance.now();(function f(n){const t=Math.min((n-t0)/1000,D);show(t);if(t<D)requestAnimationFrame(f)})(t0)};
 </script>
