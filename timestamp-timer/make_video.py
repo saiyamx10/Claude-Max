@@ -14,11 +14,9 @@ def fmt(sec):
     h, m, s = sec // 3600, sec // 60 % 60, sec % 60
     return f"{h % 12 or 12}:{m:02d}:{s:02d}", "PM" if h >= 12 else "AM"
 
-f_ms = ImageFont.truetype(MONO, 80)
-
 def clock(d, y, hms, ms, ampm, fill):
     # H:MM:SS big, .mmm smaller beside the seconds, then AM/PM
-    parts = [(hms, f_clock, 0), (f".{ms:03d}", f_ms, 62), (" " + ampm, f_clock, 0)]
+    parts = [(hms, f_clock, 0), (f".{ms:03d}", f_clock, 0), (" " + ampm, f_clock, 0)]
     total = sum(d.textlength(t, font=f) for t, f, _ in parts)
     x = (W - total) / 2
     for t, f, dy in parts:
@@ -38,14 +36,13 @@ ff = subprocess.Popen(
 for i in range(N):
     t = i * SECS / (N - 1)          # first frame 0.0 s, last frame 10.0 s
     now = START + int(t + 1e-9)
-    img = Image.new("RGB", (W, H), (15, 18, 28))
+    img = Image.new("RGB", (W, H), (0, 0, 0))
     d = ImageDraw.Draw(img)
-    center(d, 90, "October 06", f_title, (230, 235, 245))
+    center(d, 90, "October 06", f_title, (255, 255, 255))
     hms, ap = fmt(now)
-    clock(d, 260, hms, min(int((t % 1) * 1000 + 1e-6), 999) if t < SECS else 0, ap, (120, 220, 255))
-    center(d, 470, f"Elapsed {t:.1f}s", f_small, (160, 170, 190))
-    d.rounded_rectangle((190, 560, 1090, 590), 15, fill=(40, 46, 66))
-    d.rounded_rectangle((190, 560, 190 + 900 * t / SECS, 590), 15, fill=(120, 220, 255))
+    clock(d, 260, hms, min(int((t % 1) * 1000 + 1e-6), 999) if t < SECS else 0, ap, (255, 255, 255))
+    d.rounded_rectangle((190, 560, 1090, 590), 15, fill=(50, 50, 50))
+    d.rounded_rectangle((190, 560, 190 + 900 * t / SECS, 590), 15, fill=(255, 255, 255))
     ff.stdin.write(img.tobytes())
 
 ff.stdin.close(); ff.wait()
