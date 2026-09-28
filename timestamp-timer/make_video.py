@@ -16,7 +16,7 @@ def fmt(sec):
 
 def clock(d, y, hms, ms, ampm, fill):
     # H:MM:SS big, .mmm smaller beside the seconds, then AM/PM
-    parts = [(hms, f_clock, 0), (f".{ms:03d}", f_clock, 0), (" " + ampm, f_clock, 0)]
+    parts = [(hms, f_clock, 0), (f".{ms:02d}", f_clock, 0), (" " + ampm, f_clock, 0)]
     total = sum(d.textlength(t, font=f) for t, f, _ in parts)
     x = (W - total) / 2
     for t, f, dy in parts:
@@ -40,7 +40,7 @@ for i in range(N):
     d = ImageDraw.Draw(img)
     center(d, 90, "October 06", f_title, (255, 255, 255))
     hms, ap = fmt(now)
-    clock(d, 260, hms, min(int((t % 1) * 1000 + 1e-6), 999) if t < SECS else 0, ap, (255, 255, 255))
+    clock(d, 260, hms, min(int((t % 1) * 100 + 1e-6), 99) if t < SECS else 0, ap, (255, 255, 255))
     d.rounded_rectangle((190, 560, 1090, 590), 15, fill=(50, 50, 50))
     d.rounded_rectangle((190, 560, 190 + 900 * t / SECS, 590), 15, fill=(255, 255, 255))
     ff.stdin.write(img.tobytes())

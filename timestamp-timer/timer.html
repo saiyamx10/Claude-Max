@@ -15,6 +15,6 @@ h1{font-size:clamp(18px,3.4vw,40px)} #clock{font:700 clamp(36px,9.5vw,130px) ui-
 <script>
 const S=20*3600+56*60+50,D=10,$=id=>document.getElementById(id);
 const fmt=s=>{const h=s/3600|0,m=s/60%60|0,x=s%60;return`${h%12||12}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")} ${h>=12?"PM":"AM"}`};
-function show(t){const ms=String(Math.floor(t%1*1000)).padStart(3,"0"),[a,b]=fmt(S+Math.floor(t)).split(" ");$("clock").innerHTML=`${a}.${ms} ${b}`;$("fill").style.width=t/D*100+"%"}
+function show(t){const ms=String(Math.floor(t%1*100)).padStart(2,"0"),[a,b]=fmt(S+Math.floor(t)).split(" ");$("clock").innerHTML=`${a}.${ms} ${b}`;$("fill").style.width=t/D*100+"%"}
 $("go").onclick=()=>{const t0=performance.now();(function f(n){const t=Math.min((n-t0)/1000,D);show(t);if(t<D)requestAnimationFrame(f)})(t0)};
 </script>
