@@ -13,7 +13,6 @@ START = 20 * 3600 + 56 * 60 + 50              # 8:56:50 PM
 BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
 f_title, f_clock = ImageFont.truetype(BOLD, 44), ImageFont.truetype(MONO, 130)
-f_bday = ImageFont.truetype(BOLD, 56)
 
 def fmt(sec):
     h, m, s = sec // 3600, sec // 60 % 60, sec % 60
@@ -86,8 +85,6 @@ for i in range(N):
     center(d, 90, "October 06", f_title, (255, 255, 255))
     hms, ap = fmt(START + int(c + 1e-9))
     clock(d, 260, hms, min(int((c % 1) * 100 + 1e-6), 99) if c < RUN else 0, ap)
-    if s >= HOLD_AT:
-        center(d, 620, "HAPPY BIRTHDAY!", f_bday, (255, 255, 255))
     d.rounded_rectangle((190, 540, 1090, 560), 10, fill=(50, 50, 50))
     d.rounded_rectangle((190, 540, 190 + 900 * c / RUN, 560), 10, fill=(255, 255, 255))
     ff.stdin.write(img.tobytes())
