@@ -1,12 +1,12 @@
 """Render timestamp.mp4: October 06, clock 8:56:50 PM -> 8:57:00 PM.
-The clock holds at 8:56:57.00 for 3 s while birthday fireworks burst behind it.
+The clock stops at 8:57:00.00 for 3 s while birthday fireworks burst behind it.
 Total 13 s."""
 import colorsys, math, random, subprocess
 import imageio_ffmpeg
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 W, H, FPS = 1280, 720, 30
-HOLD_AT, HOLD_LEN, RUN = 7.0, 3.0, 10.0      # clock seconds run 0..10; hold at 7 (=57 s)
+HOLD_AT, HOLD_LEN, RUN = 10.0, 3.0, 10.0     # clock runs 0..10 s (to 8:57:00), then stops for 3 s
 TOTAL = RUN + HOLD_LEN                        # 13 s
 N = int(TOTAL * FPS)                          # 390 frames
 START = 20 * 3600 + 56 * 60 + 50              # 8:56:50 PM
@@ -28,8 +28,8 @@ def clock(d, y, hms, cs, ampm):
 # --- fireworks: deterministic bursts (launch time, x, burst y, hue) ---
 rnd = random.Random(6)
 BURSTS = []
-for k in range(14):
-    t_burst = 7.0 + k * 0.42
+for k in range(10):
+    t_burst = HOLD_AT + k * 0.3
     x = rnd.randint(150, W - 150)
     y = rnd.randint(90, 330)
     hue = rnd.random()
@@ -73,20 +73,12 @@ ff = subprocess.Popen(
 
 for i in range(N):
     s = i * TOTAL / (N - 1)                          # video time; last frame = 13.0 s
-    if s < HOLD_AT:
-        c = s                                        # running toward 8:56:57
-    elif s < HOLD_AT + HOLD_LEN:
-        c = HOLD_AT                                  # frozen at 8:56:57.00
-    else:
-        c = s - HOLD_LEN                             # resumes to 8:57:00
-    c = min(c, RUN)
+    c = min(s, RUN)                                  # stops at 8:57:00.00
     img = fireworks(s)
     d = ImageDraw.Draw(img)
     center(d, 90, "October 06", f_title, (255, 255, 255))
     hms, ap = fmt(START + int(c + 1e-9))
     clock(d, 260, hms, min(int((c % 1) * 100 + 1e-6), 99) if c < RUN else 0, ap)
-    d.rounded_rectangle((190, 540, 1090, 560), 10, fill=(50, 50, 50))
-    d.rounded_rectangle((190, 540, 190 + 900 * c / RUN, 560), 10, fill=(255, 255, 255))
     ff.stdin.write(img.tobytes())
 
 ff.stdin.close(); ff.wait()
